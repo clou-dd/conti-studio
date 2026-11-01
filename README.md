@@ -2,6 +2,8 @@
 
 예배의 흐름을 한 장에. 송폼과 악보를 편집하고, 확인한 페이지를 PDF로 만드는 웹 도구입니다.
 
+[웹에서 사용하기](https://conti-studio-web.vercel.app/)
+
 ![콘티 편집 화면](docs/preview-20261101.jpg)
 
 ## v0.1.0
@@ -51,7 +53,7 @@ A2 B2 c2 e2 | f2 e2 d2 c2 | A2 c2 e2 c2 | B4 E4 |
 
 ## Vercel 배포
 
-GitHub의 `clou-dd/conti-studio` 저장소를 Vercel에 연결합니다.
+GitHub의 `clou-dd/conti-studio` 저장소가 Vercel의 `conti-studio-web` 프로젝트에 연결되어 있습니다. `main`에 변경 사항을 올리면 Vercel이 자동으로 빌드하고 배포합니다.
 
 | 설정 | 값 |
 | --- | --- |
@@ -60,7 +62,7 @@ GitHub의 `clou-dd/conti-studio` 저장소를 Vercel에 연결합니다.
 | Install Command | `npm ci` |
 | Build Command | `npm run build` |
 | Output Directory | `dist` |
-| Node.js | 22 이상 |
+| Node.js | 22 LTS (22.12 이상) |
 | 환경 변수 | 없음 |
 
 `vercel.json`이 포함되어 있습니다. Git 연동 시 `main`의 변경 사항을 자동 배포할 수 있습니다. 브라우저 작업 데이터는 도메인별로 구분되므로, 미리보기 주소에서 만든 작업을 실제 서비스 주소로 옮기려면 프로젝트 파일을 사용하세요.

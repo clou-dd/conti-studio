@@ -72,6 +72,7 @@ export function validateProject(p, assets) {
       continue;
     }
     if (!text(item.key, 30) || !text(item.url, 3000) || !text(item.notes) || !Array.isArray(item.form) || item.form.length > 200 || !Array.isArray(item.blocks) || item.blocks.length > 300) fail('곡 편집 정보가 올바르지 않습니다.');
+    if(item.compactLayout!==undefined&&typeof item.compactLayout!=='boolean')fail('악보 정리 설정이 올바르지 않습니다.');
     if (item.analysis) {
       const a = item.analysis;
       if (!Number.isFinite(a.bpm) || a.bpm < 40 || a.bpm > 240 || !text(a.sourceUrl, 3000) || !Array.isArray(a.sections) || a.sections.length > 200) fail('음원 분석 정보가 올바르지 않습니다.');

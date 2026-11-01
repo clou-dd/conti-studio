@@ -1,4 +1,4 @@
-# Browser audio analysis — v0.4.0
+# Browser audio analysis — v0.5.0
 
 ## Flow
 
@@ -34,4 +34,12 @@ Client limits: audio 50 MB / 10 minutes; score files 20 MB; PDF 20 pages per imp
 
 ## Key estimation and single-line notation
 
-Audio is sampled in half-second steps with a Hann-window FFT and interpolated spectral peaks. The accumulated chroma is ranked against Krumhansl–Kessler major/minor profiles. Similarity gaps are qualitative candidate-separation labels, not probabilities. Silence or insufficient pitch diversity yields no key. A separate lightweight worker runs this automatically after audio input. Manual key selection overrides the estimate for transcription. Generated notation uses that key signature, tracks accidental state per bar, and quantizes timing to sixteenths (written with L:1/8 fractional lengths). Key-signature edits preserve absolute pitches rather than transposing them. No automatic repeat folding or source separation is claimed.
+Audio is sampled in half-second steps with a Hann-window FFT and interpolated spectral peaks. The accumulated chroma is ranked against Krumhansl–Kessler major/minor profiles. Similarity gaps are qualitative candidate-separation labels, not probabilities. Silence or insufficient pitch diversity yields no key. A separate lightweight worker runs this automatically after audio input. Manual key selection overrides the estimate for transcription. Generated notation uses that key signature, tracks accidental state per bar, and quantizes timing to sixteenths (written with L:1/8 fractional lengths). Key-signature edits preserve absolute pitches rather than transposing them. No source separation is claimed.
+
+## Compact score output
+
+Analysis chunks remain the editable, saved source. An optional reversible `compactLayout` view flattens them across chunk boundaries, folds only exactly matching notes and chords in four/eight-bar phrases, and emits each unique phrase once with an A/B/C performance order. Ties crossing phrase boundaries are not folded. Different endings stay separate. No approximate similarity or semantic Verse/Chorus matching is claimed; noisy repeat transcriptions may need correction before they can fold.
+
+The compact form replaces the original form only in this output view. Original blocks and form remain in autosave/archive. All blocks must be melody notation in the same key/meter; mixed scans or text fall back visibly to basic layout. Compact output supports up to 1,200 source bars and 256 unique bars. It fits one A4 page if possible, with a minimum of 82% normal staff scale. Longer output paginates only between ABCJS system ink bounds; missing safe boundaries produces a review warning, never silent staff clipping.
+
+Local rendering checks: ten 16-bar chunks containing the same eight-bar phrase became one eight-bar page; 128 unique bars became three pages, without review warnings. Automated tests cover reversible folding, performance-order reconstruction, different endings/chords, cross-boundary ties, ABC section/key syntax, fit scale, mixed-block rejection and saved compact-view settings.

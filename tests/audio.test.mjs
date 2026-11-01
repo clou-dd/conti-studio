@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateBeats, notesToDraft, sectionsToForm, AUDIO_RATE } from '../src/audio-core.mjs';
+import { estimateBeats, notesToDraft, sectionsToForm, planTranscriptionChunks, AUDIO_RATE } from '../src/audio-core.mjs';
 import { interludeAbc } from '../src/render.js';
 import { createProject, createSong, validateProject } from '../src/model.mjs';
 
@@ -44,4 +44,19 @@ test('분석 결과의 구간 겹침과 비정상 시간을 프로젝트 복원 
   assert.throws(() => validateProject(project, {}), /음원 분석/);
   song.analysis.sections[1].start = 4;
   assert.equal(validateProject(project, {}).items[0].analysis.sections.length, 2);
+});
+
+test('전체 채보는 마디 경계에서 나누고 마지막 짧은 구간까지 빠짐없이 보존한다', () => {
+  assert.deepEqual(planTranscriptionChunks(67.5, 120), [{ start: 0, end: 32 }, { start: 32, end: 64 }, { start: 64, end: 67.5 }]);
+  assert.deepEqual(planTranscriptionChunks(40, 120, '6/8'), [{ start: 0, end: 24 }, { start: 24, end: 40 }]);
+});
+
+test('느린 곡도 각 채보 구간이 60초를 넘지 않고 10분 전체를 빈틈없이 덮는다', () => {
+  const chunks = planTranscriptionChunks(600, 40);
+  assert.equal(chunks[0].start, 0); assert.equal(chunks.at(-1).end, 600);
+  for (let i = 0; i < chunks.length; i++) {
+    assert.ok(chunks[i].end - chunks[i].start <= 60);
+    if (i) assert.equal(chunks[i].start, chunks[i - 1].end);
+  }
+  assert.throws(() => planTranscriptionChunks(800, 120), /확인/);
 });

@@ -5,6 +5,18 @@ export const MAX_AUDIO_SECONDS = 600;
 export const SECTION_NAMES = { Intro: 'Intro', Verse: 'A', Chorus: 'B', Bridge: 'C', Instrumental: 'Inter', Outro: 'Out', Silence: '쉼' };
 export const timeLabel = seconds => `${Math.floor(Math.max(0, seconds) / 60)}:${(Math.max(0, seconds) % 60).toFixed(1).padStart(4, '0')}`;
 
+export function planTranscriptionChunks(duration, bpm, meter = '4/4') {
+  if (!Number.isFinite(duration) || duration <= 0 || duration > MAX_AUDIO_SECONDS + 1 || !Number.isFinite(bpm) || bpm < 40 || bpm > 240 || !['4/4','3/4','6/8','12/8','2/4'].includes(meter)) throw new Error('음원 길이·BPM·박자를 확인해 주세요.');
+  const [numerator, denominator] = meter.split('/').map(Number);
+  const secondsPerBar = numerator * 4 / denominator * 60 / bpm;
+  const barsPerChunk = Math.max(1, Math.min(16, Math.floor(60 / secondsPerBar)));
+  const chunkSeconds = barsPerChunk * secondsPerBar, chunks = [];
+  for (let i = 0; i * chunkSeconds < duration - .001; i++) {
+    chunks.push({ start: i * chunkSeconds, end: Math.min(duration, (i + 1) * chunkSeconds) });
+  }
+  return chunks;
+}
+
 export function estimateBeats(audio, sampleRate = AUDIO_RATE, bpmOverride = 0) {
   const fps = 100, hop = Math.round(sampleRate / fps), envelope = [];
   for (let pos = 0; pos + hop * 2 < audio.length; pos += hop) {

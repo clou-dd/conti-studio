@@ -2,3 +2,5 @@
 @media(max-width:700px){.audio-studio{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;border-radius:0}.audio-studio .modal-head{padding:19px 17px 15px}.audio-steps{padding:0 15px 13px}.audio-steps button{padding:9px 8px;font-size:10px;gap:5px}.audio-body{padding:17px}.audio-input-layout{grid-template-columns:1fr;gap:20px}.audio-guide h3{font-size:20px}.audio-player{grid-template-columns:1fr}.audio-section-row{gap:5px;padding:8px 6px;flex-wrap:wrap}.audio-section-row>input{width:70px}.audio-time{min-width:42px;font-size:10px}.audio-end input{width:66px}.audio-section-row .text-button{margin-left:auto}.audio-section-row .icon-button{width:28px;height:28px}.audio-draft{padding:13px}.audio-studio .modal-footer{padding:13px 17px}.audio-footer-note{max-width:140px;line-height:1.7}}
 
 .audio-clip-fields{display:contents;border:0;padding:0;margin:0;min-width:0}
+
+.audio-whole-navigation{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:20px}.audio-whole-navigation .field{flex:1;min-width:180px;margin:0}

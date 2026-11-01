@@ -5,7 +5,7 @@ let model;
 self.onmessage = async ({ data }) => {
   try {
     ort.env.wasm.numThreads = 1;
-    ort.env.wasm.wasmPaths = `${data.base}wasm/`;
+    ort.env.wasm.wasmPaths = `${data.base}wasm/ort-1.22.0/`;
     self.postMessage({ progress: 'BPM과 박자 위치 추정 중…' });
     const { bpm, beats } = estimateBeats(data.samples, data.sampleRate, data.bpm);
     if (beats.length > 1500) throw new Error('이 음원은 브라우저 분석 범위를 넘습니다. 더 짧은 구간을 선택해 주세요.');

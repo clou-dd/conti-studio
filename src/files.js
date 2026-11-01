@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import { safeName, uid, fullCrop, validateProject } from './model.mjs';
 
-const MAX_FILE = 45 * 1024 * 1024;
+const MAX_FILE = 20 * 1024 * 1024;
 const MAX_PROJECT = 150 * 1024 * 1024;
 export function download(blob, name) {
   const url = URL.createObjectURL(blob);
@@ -30,7 +30,7 @@ export async function imageAsset(file) {
 export async function importScores(files, progress = () => {}) {
   const assets = [], failures = [];
   for (const file of files) {
-    if (file.size > MAX_FILE) { failures.push(`${file.name}: 파일당 45MB까지 올릴 수 있습니다.`); continue; }
+    if (file.size > MAX_FILE) { failures.push(`${file.name}: 파일당 20MB까지 올릴 수 있습니다.`); continue; }
     try {
       if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
         const pdfjs = await import('pdfjs-dist');
@@ -38,7 +38,7 @@ export async function importScores(files, progress = () => {}) {
         const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false });
         const doc = await task.promise;
         try {
-          if (doc.numPages > 80) throw new Error('PDF는 한 번에 80쪽까지 불러올 수 있습니다.');
+          if (doc.numPages > 20) throw new Error('PDF는 한 번에 20쪽까지 불러올 수 있습니다.');
           for (let i = 1; i <= doc.numPages; i++) {
             progress(`${file.name} · ${i}/${doc.numPages}쪽 불러오는 중`);
             const page = await doc.getPage(i); const base = page.getViewport({ scale: 1 });

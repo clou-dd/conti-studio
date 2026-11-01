@@ -1,4 +1,4 @@
-# Browser audio analysis — v0.2.0
+# Browser audio analysis — v0.3.0
 
 ## Flow
 
@@ -25,3 +25,9 @@ Spotify Basic Pitch TypeScript 1.0.1, Apache 2.0; license served at `/licenses/b
 ## Verification
 
 Automated tests exercise a known 100 BPM pulse track, silence rejection, pitch selection, bar-spanning ties, compound-meter bar counts, invalid overlapping sections, existing archive/PDF generation. Browser checks use an original synthetic 32-second clip, never fabricated output for a real YouTube link. Live YouTube capture and real-song accuracy still require a user's browser permission and an actual music source.
+
+## Full-song draft
+
+The same Basic Pitch worker can process a whole song in bar-aligned chunks (at most 16 bars / 60 seconds), loading its model once. Each resulting block has a melody line, coarse chord candidates and the source time range. Users can edit blocks individually or add all to the existing score. This is not instrument-separated orchestration or automatic optical matching to an uploaded scan.
+
+Client limits: audio 50 MB / 10 minutes; score files 20 MB; PDF 20 pages per import. Limits protect client memory and time, not a Vercel upload API. Versioned Basic Pitch and WASM assets carry immutable long-lived cache headers. Legacy unversioned paths remain for clients from the previous deployment.

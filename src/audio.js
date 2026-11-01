@@ -1,7 +1,7 @@
 import { AUDIO_RATE, MAX_AUDIO_SECONDS } from './audio-core.mjs';
 export const audioBase = () => new URL(import.meta.env.BASE_URL, window.location.href).href;
 export async function decodeAudio(file) {
-  if (file.size > 80 * 1024 * 1024) throw new Error('음원 파일은 80MB까지 선택해 주세요.');
+  if (file.size > 50 * 1024 * 1024) throw new Error('음원 파일은 50MB까지 선택해 주세요.');
   const Context = window.AudioContext || window.webkitAudioContext;
   const context = new Context();
   try {
@@ -64,19 +64,20 @@ export async function captureTab(onProgress, onEnded) {
   }
 }
 
-export function transcribeClip(samples, onProgress, signal) {
+export function transcribeClip(samples, onProgress, signal, options = {}) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./transcription.worker.js', import.meta.url), { type: 'module' });
     const cleanup = () => { clearTimeout(timer); worker.terminate(); signal?.removeEventListener('abort', abort); };
     const abort = () => { cleanup(); reject(new Error('채보를 중단했습니다.')); };
-    const timer = setTimeout(() => { cleanup(); reject(new Error('채보 시간이 길어 중단했습니다. 더 짧은 간주 구간으로 다시 시도해 주세요.')); }, 180000);
+    const timedOut = () => { cleanup(); reject(new Error('채보 응답이 없어 중단했습니다. 더 짧은 구간으로 다시 시도해 주세요.')); };
+    let timer = setTimeout(timedOut, 180000);
     signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) { abort(); return; }
     worker.onmessage = ({ data }) => {
-      if (data.progress) onProgress(data.progress);
+      if (data.progress) { clearTimeout(timer); timer = setTimeout(timedOut, 180000); onProgress(data.progress); }
       else { cleanup(); data.error ? reject(new Error(data.error)) : resolve(data.result); }
     };
     worker.onerror = () => { cleanup(); reject(new Error('채보 모델을 실행하지 못했습니다. 브라우저를 확인하거나 구간을 줄여 주세요.')); };
-    worker.postMessage({ samples, base: audioBase() }, [samples.buffer]);
+    worker.postMessage({ samples, base: audioBase(), ...options }, [samples.buffer]);
   });
 }

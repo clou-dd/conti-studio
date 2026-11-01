@@ -72,6 +72,14 @@ export function validateProject(p, assets) {
       continue;
     }
     if (!text(item.key, 30) || !text(item.url, 3000) || !text(item.notes) || !Array.isArray(item.form) || item.form.length > 200 || !Array.isArray(item.blocks) || item.blocks.length > 300) fail('곡 편집 정보가 올바르지 않습니다.');
+    if (item.analysis) {
+      const a = item.analysis;
+      if (!Number.isFinite(a.bpm) || a.bpm < 40 || a.bpm > 240 || !text(a.sourceUrl, 3000) || !Array.isArray(a.sections) || a.sections.length > 200) fail('음원 분석 정보가 올바르지 않습니다.');
+      for (let i = 0; i < a.sections.length; i++) {
+        const s = a.sections[i];
+        if (!s || !text(s.id, 100) || !text(s.label, 40) || !Number.isFinite(s.start) || !Number.isFinite(s.end) || s.start < 0 || s.end <= s.start || s.end > 601 || (i && Math.abs(s.start - a.sections[i - 1].end) > .01)) fail('음원 분석 구간이 올바르지 않습니다.');
+      }
+    }
     for (const token of item.form) {
       checkId(token.id);
       if (!text(token.label, 80) || !text(token.note, 300) || !text(token.color, 30) || (token.color && !/^#[0-9a-f]{6}$/i.test(token.color))) fail('송폼 정보가 올바르지 않습니다.');

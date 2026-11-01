@@ -7,3 +7,6 @@ tmp/
 *.conti
 *.conti.zip
 .DS_Store
+/public/models/basic-pitch/
+/public/wasm/
+/public/licenses/

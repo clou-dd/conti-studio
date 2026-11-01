@@ -1,11 +1,11 @@
 {
   "name": "conti-studio",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
+    "dev": "node scripts/prepare-audio-models.mjs && vite --host 0.0.0.0",
+    "build": "node scripts/prepare-audio-models.mjs && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test tests/*.test.mjs"
   },
@@ -17,7 +17,9 @@
     "pdfjs-dist": "^5.4.0",
     "pdf-lib": "^1.17.1",
     "jszip": "^3.10.1",
-    "abcjs": "^6.5.0"
+    "abcjs": "^6.5.0",
+    "@spotify/basic-pitch": "1.0.1",
+    "onnxruntime-web": "1.22.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.0.0",

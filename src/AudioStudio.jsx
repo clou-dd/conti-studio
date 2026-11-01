@@ -4,8 +4,9 @@ import { X, Loader2, Upload, Play, Square, Music2, Scissors, Plus, Trash2, Check
 import { youtubeId, uid } from './model.mjs';
 import { interludeAbc } from './render.js';
 import { audioBase, audioWav, captureTab, decodeAudio, transcribeClip } from './audio.js';
-import { demoAudio, notesToDraft, sectionsToForm, timeLabel } from './audio-core.mjs';
+import { demoAudio, notesToDraft, sectionsToForm, timeLabel, respellKey } from './audio-core.mjs';
 import './audio.css';
+import { KEY_OPTIONS } from './key-analysis.mjs';
 
 function Notation({ block, onError }) {
   const ref = useRef(null);
@@ -27,6 +28,7 @@ export default function AudioStudio({ song, onClose, onApplyForm, onApplyScore }
   const [recording, setRecording] = useState(false), [recordSeconds, setRecordSeconds] = useState(0);
   const [clipStart, setClipStart] = useState(0), [clipEnd, setClipEnd] = useState(8), [draft, setDraft] = useState(null), [notationError, setNotationError] = useState('');
   const [wholeDrafts, setWholeDrafts] = useState([]), [draftIndex, setDraftIndex] = useState(0);
+  const [keyEstimate,setKeyEstimate]=useState(null),[scoreKey,setScoreKey]=useState(''),[keyLoading,setKeyLoading]=useState(false);
   const input = useRef(), player = useRef(), capture = useRef(), worker = useRef(), active = useRef(true), generation = useRef(0), stopRef = useRef(), playbackEnd = useRef(null);
   const root = useRef(), operation = useRef(false), captureWanted = useRef(false);
   const transcription = useRef(null), cancelAnalysis = useRef(null);
@@ -50,6 +52,16 @@ export default function AudioStudio({ song, onClose, onApplyForm, onApplyScore }
     const next = URL.createObjectURL(audioWav(audio.samples, audio.sampleRate)); setAudioUrl(next);
     return () => URL.revokeObjectURL(next);
   }, [audio]);
+  useEffect(()=>{
+    if(!audio)return;
+    let valid=true;setKeyLoading(true);setKeyEstimate(null);setScoreKey('');
+    const w=new Worker(new URL('./key.worker.js',import.meta.url),{type:'module'});
+    const timer=setTimeout(()=>{w.terminate();if(valid)setKeyLoading(false);},30000);
+    w.onmessage=({data})=>{clearTimeout(timer);w.terminate();if(!valid)return;setKeyLoading(false);setKeyEstimate(data.result||null);if(data.result)setScoreKey(data.result.key);};
+    w.onerror=()=>{clearTimeout(timer);w.terminate();if(valid)setKeyLoading(false);};
+    const samples=audio.samples.slice();w.postMessage({samples,sampleRate:audio.sampleRate},[samples.buffer]);
+    return()=>{valid=false;clearTimeout(timer);w.terminate();};
+  },[audio]);
   function receiveAudio(next) {
     if (!active.current) return;
     if (next.duration < 3) throw new Error('3초 이상의 소리를 가져와 주세요.');
@@ -140,6 +152,7 @@ export default function AudioStudio({ song, onClose, onApplyForm, onApplyScore }
   }
   async function transcribe() {
     if (!audio) return;
+    if(keyLoading||!scoreKey){setError('조성 추정 결과를 기다리거나 Key를 직접 선택해 주세요.');return;}
     const start = Number(clipStart), end = Number(clipEnd), tempo = Number(bpmInput) || bpm || 120;
     if (tempo < 40 || tempo > 240 || !Number.isFinite(tempo)) { setError('BPM은 40~240 사이로 입력해 주세요.'); return; }
     if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end > audio.duration || end - start < 1 || end - start > 60) { setError('간주 구간은 음원 안에서 1~60초로 선택해 주세요.'); return; }
@@ -150,12 +163,12 @@ export default function AudioStudio({ song, onClose, onApplyForm, onApplyScore }
       const clip = audio.samples.slice(Math.floor(start * audio.sampleRate), Math.floor(end * audio.sampleRate));
       const controller = new AbortController(); transcription.current = controller;
       let events;
-      try { events = await transcribeClip(clip, progress => { if (active.current && version === generation.current) setBusy(progress); }, controller.signal, { sampleRate: audio.sampleRate }); }
+      try { const result = await transcribeClip(clip, progress => { if (active.current && version === generation.current) setBusy(progress); }, controller.signal, { sampleRate: audio.sampleRate, key:scoreKey }); events=result.events; }
       finally { if (transcription.current === controller) transcription.current = null; }
       if (!active.current || version !== generation.current) return;
-      const result = notesToDraft(events, { bpm: tempo, duration: end - start, meter });
+      const result = notesToDraft(events, { bpm: tempo, duration: end - start, meter, key:scoreKey });
       if (!result.noteCount) throw new Error('이 구간에서 채보할 음표를 찾지 못했습니다. 구간을 바꾸거나 악기 음원이 더 선명한 파일을 사용해 주세요.');
-      setDraft({ title: `Interlude · ${timeLabel(start)}–${timeLabel(end)}`, key: 'C', meter, mode: 'melody', notes: result.notes, chords: result.chords, note: `자동 채보 초안 · ♩=${Math.round(tempo)} · 음정·리듬·코드를 확인해 주세요.` });
+      setDraft({ title: `Interlude · ${timeLabel(start)}–${timeLabel(end)}`, key: scoreKey, meter, mode: 'melody', notes: result.notes, chords: result.chords, note: `단선 채보 초안 · ♩=${Math.round(tempo)} · 음정·리듬·코드를 확인해 주세요.` });
       setNotice('간주 악보 초안이 생성되었습니다. 재생하며 음표와 코드를 수정해 주세요.');
     });
   }
@@ -167,16 +180,17 @@ export default function AudioStudio({ song, onClose, onApplyForm, onApplyScore }
   };
   async function transcribeWhole() {
     if (!audio) return;
+    if(keyLoading||!scoreKey){setError('조성 추정 결과를 기다리거나 Key를 직접 선택해 주세요.');return;}
     const tempo = Number(bpmInput) || bpm || 120;
     if (!Number.isFinite(tempo) || tempo < 40 || tempo > 240) { setError('BPM은 40~240 사이로 입력해 주세요.'); return; }
     await perform(async version => {
       setBusy('전체 곡 채보 준비 중…');
       const controller = new AbortController(); transcription.current = controller;
       let result;
-      try { result = await transcribeClip(audio.samples.slice(), progress => { if (active.current && version === generation.current) setBusy(progress); }, controller.signal, { whole: true, bpm: tempo, meter, sampleRate: audio.sampleRate }); }
+      try { result = await transcribeClip(audio.samples.slice(), progress => { if (active.current && version === generation.current) setBusy(progress); }, controller.signal, { whole: true, bpm: tempo, meter, key:scoreKey, sampleRate: audio.sampleRate }); }
       finally { if (transcription.current === controller) transcription.current = null; }
       if (!active.current || version !== generation.current) return;
-      const blocks = result.map((r, i) => ({ title: `전체 채보 ${String(i + 1).padStart(2, '0')} · ${timeLabel(r.start)}–${timeLabel(r.end)}`, key: 'C', meter, mode: 'melody', notes: r.notes, chords: r.chords, note: `전체 곡 채보 초안 · ♩=${Math.round(tempo)} · 음정·리듬·코드를 확인해 주세요.` }));
+      const blocks = result.map((r, i) => ({ title: `전체 채보 ${String(i + 1).padStart(2, '0')} · ${timeLabel(r.start)}–${timeLabel(r.end)}`, key: r.key, meter, mode: 'melody', notes: r.notes, chords: r.chords, note: `전체 곡 채보 초안 · ♩=${Math.round(tempo)} · 음정·리듬·코드를 확인해 주세요.` }));
       setWholeDrafts(blocks); setDraftIndex(0); setDraft(blocks[0]);
       setNotice(`전체 곡을 ${blocks.length}개 악보로 나누어 채보했습니다. 구간별로 수정한 뒤 콘티에 추가하세요.`);
     });
@@ -205,12 +219,13 @@ export default function AudioStudio({ song, onClose, onApplyForm, onApplyScore }
         <div className="audio-alternative"><input ref={input} type="file" accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.webm" hidden onChange={e => { const file = e.target.files[0]; e.target.value = ''; if (file) perform(async () => { setBusy('음원 파일 불러오는 중…'); receiveAudio(await decodeAudio(file)); }); }}/><button className="button" disabled={!!busy || recording} onClick={() => input.current.click()}><Upload size={16}/>음원 파일 선택</button><button className="text-button" disabled={!!busy || recording} onClick={() => { receiveAudio(demoAudio()); setBpmInput('120'); }}>합성 음원으로 기능 체험<ArrowRight size={13}/></button><small>음원 파일은 50MB·10분까지 지원합니다. 합성 음원은 기능 확인용 소리입니다.</small></div>
       </div></div>}
       {audio && <section className="audio-player"><div><strong>{audio.name}</strong><span>{timeLabel(audio.duration)} · 원본 음원은 이 창을 닫을 때 해제됩니다.</span></div><audio ref={player} src={audioUrl || undefined} controls onTimeUpdate={e => { if (playbackEnd.current != null && e.currentTarget.currentTime >= playbackEnd.current) { e.currentTarget.pause(); playbackEnd.current = null; } }}/></section>}
+      {audio && <section className="audio-key-panel"><div><strong>키·조성 추정</strong><p>{keyLoading?'음원의 음높이 분포 분석 중…':keyEstimate?`${keyEstimate.key} ${keyEstimate.mode} · 후보 구분 ${keyEstimate.confidence}`:'조성을 판단하기 어렵습니다. Key를 직접 선택해 주세요.'}</p>{keyEstimate&&<small>다른 후보: {keyEstimate.candidates.slice(1).map(c=>`${c.key} ${c.mode}`).join(' · ')} · 곡 전체 기준의 추정이며 전조는 직접 확인해 주세요.</small>}</div><label className="field">채보에 사용할 Key<select aria-label="채보 조성 선택" value={scoreKey} disabled={keyLoading||!!busy||recording} onChange={e=>{setScoreKey(e.target.value);setDraft(null);setWholeDrafts([]);}}><option value="">선택해 주세요</option>{KEY_OPTIONS.map(k=><option key={k} value={k}>{k} {k.endsWith('m')?'단조':'장조'}</option>)}</select></label><button className="button" disabled={!scoreKey||keyLoading||!!busy} onClick={()=>{onApplyForm({url,bpm:Number(bpmInput)||bpm||120,sections,key:scoreKey},null);setNotice(`${scoreKey}를 현재 찬양의 Key에 적용했습니다. 송폼은 유지됩니다.`);}}>곡 Key에 적용</button></section>}
       {step < 2 && <div className="audio-analysis-control"><label className="field">BPM 보정 <input type="number" aria-label="분석 BPM 보정" min={40} max={240} value={bpmInput} placeholder={bpm ? bpm.toFixed(1) : '자동 추정'} disabled={!!busy || recording} onChange={e => setBpmInput(e.target.value)}/></label><label className="field">박자<select value={meter} onChange={e => setMeter(e.target.value)}>{['4/4', '3/4', '6/8', '2/4'].map(m => <option key={m}>{m}</option>)}</select></label><button className="button primary" disabled={!audio || !!busy || recording} onClick={analyze}><Music2 size={16}/>{sections.length ? '송폼 다시 분석' : '송폼 분석하기'}</button><small>박자·BPM·마디 수는 추정값입니다. 라이브의 템포 변화는 직접 교정해 주세요.</small></div>}
       {step === 1 && <section><div className="audio-section-title"><div><h3>송폼 초안</h3><p>A=Verse · B=Chorus · C=Bridge로 시작합니다. 우리 팀의 표기로 바꿔 주세요.</p></div>{bpm > 0 && <span className="pill">♩ ≈ {(Number(bpmInput) || bpm).toFixed(1)}</span>}</div>
         {!sections.length ? <div className="audio-empty">음원을 연결하고 ‘송폼 분석하기’를 눌러 주세요.</div> : <><div className="audio-timeline">{sections.map(s => <button key={s.id} style={{ flexGrow: Math.max(.1, s.end - s.start) }} title={`${s.label} ${timeLabel(s.start)}–${timeLabel(s.end)}`} onClick={() => listen(s.start, s.end)}>{s.label}</button>)}</div><div className="audio-section-list">{sections.map((s, i) => <div className="audio-section-row" key={s.id}><button className="icon-button" aria-label={`${i + 1}번 구간 듣기`} disabled={!audio} onClick={() => listen(s.start, s.end)}><Play size={14}/></button><span className="audio-time">{timeLabel(s.start)}</span><input aria-label={`${i + 1}번 구간 이름`} list="audio-labels" value={s.label} maxLength={40} onChange={e => setSections(current => current.map(x => x.id === s.id ? { ...x, label: e.target.value } : x))}/><label className="audio-end">끝 <input aria-label={`${i + 1}번 구간 끝 초`} type="number" min={s.start + .25} step="0.1" value={Number(s.end.toFixed(2))} disabled={i === sections.length - 1} onChange={e => boundary(i, Number(e.target.value))}/>초</label><button className="icon-button" aria-label={`${i + 1}번 구간 나누기`} onClick={() => split(i)}><Scissors size={15}/></button><button className="icon-button" aria-label={`${i + 1}번 구간 합치기`} disabled={sections.length < 2} onClick={() => remove(i)}><Trash2 size={15}/></button><button className="text-button" onClick={() => { setClipStart(s.start); setClipEnd(Math.min(s.end, s.start + 60)); setDraft(null); setStep(2); }}>간주로 선택</button></div>)}</div><datalist id="audio-labels">{labels.map(l => <option key={l}>{l}</option>)}</datalist><div className="audio-form-preview">{forms.map((f, i) => <span key={i}>{f.label}</span>)}</div><button className="button primary" onClick={applyForm}><Check size={16}/>현재 송폼을 이 내용으로 교체</button></>}
       </section>}
       {step === 2 && <section><div className="audio-section-title"><div><h3>악보 초안 만들기</h3><p>기존 악보에 없는 구간을 선택하거나 전체 곡을 채보합니다. 멜로디 한 줄과 코드 후보를 만들며, 밴드 음원은 교정이 필요합니다.</p></div></div><div className="audio-clip-controls"><fieldset disabled={!!busy || recording} className="audio-clip-fields"><label className="field">시작(초)<input type="number" aria-label="간주 시작 초" min="0" step="0.1" value={clipStart} onChange={e => { setClipStart(e.target.value); setDraft(null); }}/></label><label className="field">끝(초)<input type="number" aria-label="간주 끝 초" step="0.1" min="1" value={clipEnd} onChange={e => { setClipEnd(e.target.value); setDraft(null); }}/></label><label className="field">BPM<input aria-label="간주 BPM" type="number" min={40} max={240} value={bpmInput || (bpm ? bpm.toFixed(1) : 120)} onChange={e => { setBpmInput(e.target.value); setDraft(null); }}/></label><label className="field">박자<select value={meter} onChange={e => { setMeter(e.target.value); setDraft(null); }}>{['4/4', '3/4', '6/8', '2/4'].map(m => <option key={m}>{m}</option>)}</select></label><button className="button" disabled={!audio || !!busy} onClick={() => listen(Number(clipStart), Number(clipEnd))}><Play size={15}/>구간 듣기</button><button className="button primary" disabled={!audio || !!busy || recording} onClick={transcribe}>선택 구간 채보</button><button className="button" disabled={!audio || !!busy || recording} onClick={transcribeWhole}>전체 곡 채보</button></fieldset></div><p className="field-note">전체 곡은 최대 16마디씩 나누어 처리합니다. 곡 길이와 기기 성능에 따라 수분 이상 걸릴 수 있습니다. 분석 중에는 중단할 수 있습니다.</p>{!audio && <div className="audio-empty">음원을 먼저 연결해 주세요. 저장된 송폼은 그대로 수정할 수 있습니다.</div>}
-        {draft && <div className="audio-draft">{wholeDrafts.length > 0 && <div className="audio-whole-navigation"><label className="field">수정할 악보 구간<select aria-label="수정할 전체 채보 구간" value={draftIndex} onChange={e => { const index = Number(e.target.value); setDraftIndex(index); setDraft(wholeDrafts[index]); }}>{wholeDrafts.map((d, i) => <option key={i} value={i}>{d.title}</option>)}</select></label><button className="button primary" disabled={!!notationError || !!busy} onClick={addAllDrafts}>전체 {wholeDrafts.length}개 악보를 콘티에 추가</button></div>}<div className="audio-draft-header"><span className="pill">자동 채보 · 수정 전 초안</span><strong>{draft.title}</strong></div><Notation block={draft} onError={setNotationError}/>{notationError && <p className="audio-message error">{notationError}</p>}<div className="audio-draft-fields"><label className="field">악보 제목<input maxLength={100} value={draft.title} onChange={e => patchDraft({ title: e.target.value })}/></label><label className="field">Key<input maxLength={5} value={draft.key} onChange={e => patchDraft({ key: e.target.value })}/></label></div><label className="field">마디별 코드 수정<textarea aria-label="분석한 간주 코드 수정" value={draft.chords} rows="2" maxLength={1500} onChange={e => patchDraft({ chords: e.target.value })}/></label><label className="field">음표 수정 · ABC 표기<textarea aria-label="분석한 간주 음표 수정" value={draft.notes} rows="4" maxLength={10000} onChange={e => patchDraft({ notes: e.target.value })}/></label><p className="field-note">C D E F G A B = 도 레 미 파 솔 라 시 · z = 쉼표 · 숫자 2 = 4분음표 · ^ = ♯ · = = 제자리표 · | = 마디. 코드와 음표의 마디 수를 같게 맞추세요.</p><label className="field">연주 메모<input maxLength={400} value={draft.note} onChange={e => patchDraft({ note: e.target.value })}/></label><button className="button primary" disabled={!!notationError || !!busy} onClick={() => { if (onApplyScore(draft, url) !== false) setNotice('수정한 악보를 찬양 맨 아래에 추가했습니다. 악보·메모에서 위치를 옮길 수 있습니다.'); }}><Plus size={16}/>이 간주 악보를 콘티에 추가</button></div>}
+        {draft && <div className="audio-draft">{wholeDrafts.length > 0 && <div className="audio-whole-navigation"><label className="field">수정할 악보 구간<select aria-label="수정할 전체 채보 구간" value={draftIndex} onChange={e => { const index = Number(e.target.value); setDraftIndex(index); setDraft(wholeDrafts[index]); }}>{wholeDrafts.map((d, i) => <option key={i} value={i}>{d.title}</option>)}</select></label><button className="button primary" disabled={!!notationError || !!busy} onClick={addAllDrafts}>전체 {wholeDrafts.length}개 악보를 콘티에 추가</button></div>}<div className="audio-draft-header"><span className="pill">자동 채보 · 수정 전 초안</span><strong>{draft.title}</strong></div><Notation block={draft} onError={setNotationError}/>{notationError && <p className="audio-message error">{notationError}</p>}<div className="audio-draft-fields"><label className="field">악보 제목<input maxLength={100} value={draft.title} onChange={e => patchDraft({ title: e.target.value })}/></label><label className="field">Key<select value={draft.key} onChange={e => patchDraft({ key:e.target.value, notes:respellKey(draft.notes,draft.key,e.target.value) })}>{KEY_OPTIONS.map(k=><option key={k}>{k}</option>)}</select></label></div><label className="field">마디별 코드 수정<textarea aria-label="분석한 간주 코드 수정" value={draft.chords} rows="2" maxLength={1500} onChange={e => patchDraft({ chords: e.target.value })}/></label><label className="field">음표 수정 · ABC 표기<textarea aria-label="분석한 간주 음표 수정" value={draft.notes} rows="4" maxLength={10000} onChange={e => patchDraft({ notes: e.target.value })}/></label><p className="field-note">C D E F G A B = 도 레 미 파 솔 라 시 · z = 쉼표 · 숫자 2 = 4분음표 · ^ = ♯ · = = 제자리표 · | = 마디. 코드와 음표의 마디 수를 같게 맞추세요.</p><label className="field">연주 메모<input maxLength={400} value={draft.note} onChange={e => patchDraft({ note: e.target.value })}/></label><button className="button primary" disabled={!!notationError || !!busy} onClick={() => { if (onApplyScore(draft, url) !== false) setNotice('수정한 악보를 찬양 맨 아래에 추가했습니다. 악보·메모에서 위치를 옮길 수 있습니다.'); }}><Plus size={16}/>이 간주 악보를 콘티에 추가</button></div>}
       </section>}
       <details className="audio-credits"><summary>분석 도구와 처리 안내</summary><p>송폼: LinkSeg (M. Buisson, B. McFee, S. Essid, ISMIR 2024), 모델 CC BY 4.0 · LinkSeg-web 코드 MIT. 간주 채보: Spotify Basic Pitch, Apache 2.0. 최초 송폼 분석 시 공개 모델을 내려받습니다. 음원 분석은 현재 기기에서 실행하며 별도 API 키가 필요하지 않습니다.</p><p>결과는 정답이 아닌 편집 가능한 초안입니다. ‘기능 체험’의 합성 음원은 입력한 유튜브 영상의 분석 결과가 아닙니다.</p><a href="https://github.com/elicwhite/LinkSeg-web" target="_blank" rel="noreferrer">LinkSeg-web</a> · <a href="https://github.com/spotify/basic-pitch-ts" target="_blank" rel="noreferrer">Basic Pitch</a></details>
     </div><footer className="modal-footer"><span className="audio-footer-note">송폼·악보는 적용 버튼을 눌러 저장하세요.</span><button className="button" disabled={!!busy || recording} onClick={onClose}>편집기로 돌아가기</button></footer>

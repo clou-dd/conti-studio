@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.openai/
+.sites-runtime/
+.vercel/
+tmp/
+*.conti
+*.conti.zip
+.DS_Store
